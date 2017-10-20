@@ -1,0 +1,11 @@
+prefix=/net/store/nbp/eeg_et/tools/libeep-3.3.163/installation
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: libeep
+Description: A.N.T. erp package
+Requires:
+Version: 3.3.163
+Libs: -L${libdir} -leep -lm
+Cflags: -I${includedir}/libeep-3.3.163

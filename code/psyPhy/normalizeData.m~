@@ -1,0 +1,182 @@
+% BENEs VERSION
+% clear all;
+close all;
+sT = [];
+
+%% Read out data
+%  svn_path = 'D:\behinger\Studium\move\svn_move\';% behinger
+svn_path = '/net/store/projects/move/move_svn/';% Uni
+%  svn_path = 'C:\Users\user\Documents\Petra\Studium\Study_Project_MOVE\move';% pefischer
+
+
+%% Output Config
+%Preprocess Config
+cfg.plotInconsistentEvent       = 0;
+cfg.showWarningInconEvent       = 0;
+%Results Config
+cfg.plotSingleTrialError        = 0;
+cfg.showMedianError             = 0;
+cfg.showPercentageTurner        = 0;
+cfg.sanityChecks                = 0;
+cfg.plotAllAngles               = 0;
+cfg.showTrialInfo               = 0;
+
+%% Henning
+sT.subject = 'Henning SecondEEG';
+rawDat = readRawVRData_norm('..\..\behaviouralData\Test_52\Participant_52_Time_1357217714.txt');  %active data from testsession in xmas holidays
+
+%%
+[rawDat,sT] = behav_prepareRawDat(rawDat,cfg)
+
+
+%% sT.degreesTurned = normAngle(normAngle(180-sT.secondArm));
+sT.calculatedFirstArm = atan2(sT.StartPosZ, sT.StartPosX) * 180/pi;  
+sT.calculatedSecondArm = atan2(sT.EndPosZ, sT.EndPosX) * 180/pi;  
+
+
+sT.degreesTurned = normAngle(sT.calculatedSecondArm - (sT.calculatedFirstArm + 180));  % This is the better estimate
+
+
+if strcmp(sT.condition,'proprioceptive')
+    sT.degreesTurned = rawDat.proprioceptiveDummy(sT.fadeIndIdx);  
+end
+% only proprioceptive, as we have to convert real walked posX/posZ to
+% actual virtual world walked posX posZ, this is only important for the
+% last entry of posX / posZ, the others are ok :-)
+% THis is deprecated, we do not need it anymore after Jacob / Henning
+% if strcmp(sT.condition,'proprioceptive') && (strcmp(sT.subject,'Henning') || strcmp(sT.subject,'Jacob'))
+%     for tr = 1:sT.numTrials
+%         beta = sT.degreesTurned(tr);
+%         rotationMatrix = [cosd(beta) -sind(beta); sind(beta) cosd(beta)];
+%         endPosNew =rotationMatrix*[sT.EndPosX(tr);sT.EndPosZ(tr)];
+%         sT.EndPosX(tr) = endPosNew(1);
+%         sT.EndPosZ(tr) = endPosNew(2);
+%     end
+% end
+% See dropSVN\Vizard_code_documentation\Angles_ForAnalysis.jpg for details
+% of the calculation of gamma:
+bLen = sqrt((((sT.EndPosX - sT.StartPosX)).^2) + (((sT.EndPosZ - sT.StartPosZ).^2))); % hypothenuse, distance between points
+aLen = sqrt(sT.EndPosX.^2 + sT.EndPosZ.^2); % distance to (0|0)
+cLen = sqrt(sT.StartPosX.^2 + sT.StartPosZ.^2); % distance to (0|0)
+gamma = radtodeg(asin(cLen .* sin(degtorad(180 - abs(sT.degreesTurned))) ./ bLen));
+% The following alternative is a sanity check, for old files it does not
+% work for the proprioceptive (as the positions jumped to the real position
+% back and not the VR position) but for the new files it should
+gammaAlternat = radtodeg(acos(((aLen .^ 2 + bLen .^ 2 - cLen .^ 2) ./ (2 * (aLen .* bLen)))));
+sT.gamma = gamma;
+
+sT.arrowAngleInitial    =  normAngle(rawDat.chosenAngle(sT.fadeIndIdx)); 
+sT.chosenArrowAngle     =  normAngle(rawDat.chosenAngle(sT.lastIdxRaw));
+% THIS IS VERY IMPORTANT TO BE RIGHT HERE; I THINK THE SECOND LINE IS
+% CORRECT NOT THE FIRST ONE!
+%sT.chosenArrowAngleNorm =  sT.chosenArrowAngle - sT.arrowAngleInitial;
+sT.chosenArrowAngleNorm =   sT.arrowAngleInitial- sT.chosenArrowAngle ;
+
+%% NOT ABSOLUTELY SURE IF IT HAS TO BE + or MINUS before (gamma.*sign)!!!!
+% THAT'S WHY I HAVE CHANGESIGN, I'm 95% sure, that it has to be -1!!
+% A right-rotation (clockwise) of the arrow in Vizard causes the arrow angle to
+% increase (addition), and a left rotation (counterclockwise) causes it to 
+% decrease (subtraction).
+% In the polar plot in MATLAB a right-rotation is caused by a subtraction
+% (!!) and if you add values to an angle, the angle turns to the left!!!
+
+% XXX WHY DO I NEED TO DO THIS?
+if strcmp(sT.condition,'proprioceptive')
+%      changeSign = double(abs(normAngle(rawDat.firstArmOrig(sT.lastIdxRaw)))<90);
+%      changeSign(changeSign == 0) = -1;
+changeSign = 1;
+else
+changeSign = -1;
+end
+sT.arrowAngleOptimalT = normAngle(180  + (changeSign .* gamma .* sign(sT.degreesTurned)));  %180+ as the arrow otherwise would point in the wrong direction
+sT.arrowAngleOptimalNT = normAngle(sT.arrowAngleOptimalT - changeSign.* sT.degreesTurned);  % Add the turning angle (if it is negative, it automatically gets subtracted) to compensate for the nonturner effect\
+
+% % These lines are only to check if the normalized arrow yield the same
+% % error, and it does if you compare sT.errors_TNotNormed with sT.errors_T
+% % and sT.errors_NTNotNormed with sT.errors_NT
+% sT.arrowAngleOptimalTNotNormed = normAngle(180 + sT.arrowAngleInitial  + (changeSign * gamma .* sign(sT.degreesTurned)));  %180+ as the arrow otherwise would point in the wrong direction
+% sT.arrowAngleOptimalNTNotNormed = sT.arrowAngleOptimalTNotNormed + sT.degreesTurned;  % Add the turning angle (if it is negative, it automatically gets subtracted) to compensate for the nonturner effect\
+
+
+% Calc errors
+sT.errors_T = normAngle(sT.chosenArrowAngleNorm - sT.arrowAngleOptimalT);
+sT.errors_NT = normAngle(sT.chosenArrowAngleNorm - sT.arrowAngleOptimalNT);
+% % These lines are only to check if the normalized arrow yield the same
+% % error, and they do
+% sT.errors_TNotNormed = normAngle(sT.chosenArrowAngle - sT.arrowAngleOptimalTNotNormed);
+% sT.errors_NTNotNormed = normAngle(sT.chosenArrowAngle - sT.arrowAngleOptimalNTNotNormed);
+
+
+%% Plot single trial errors
+if cfg.plotSingleTrialError
+    figure;
+    bar(sT.trialNumbers, sT.errors_T);
+    xlabel('Time (Trials in order)');
+    ylabel('Error in degrees');
+    title('Errors Turners over trials');
+    axis([0 max(sT.trialNumbers)+1 -200 200])
+    figure;
+    bar(sT.trialNumbers,sT.errors_NT);
+    xlabel('Time (Trials in order)');
+    ylabel('Error in degrees');
+    title('Errors Non-Turners over trials');
+    axis([0 max(sT.trialNumbers)+1 -200 200])
+end
+%%
+if cfg.showMedianError
+fprintf('Cond: %15s  Turner  Error Median: \t %f \n',sT.condition, median(abs(sT.errors_T)))
+fprintf('Cond: %15s  NonTurner Error Median:\t %f \n',sT.condition,median(abs(sT.errors_NT)))
+end
+if cfg.showPercentageTurner
+percentageTurner = sum((abs(sT.errors_T)<abs(sT.errors_NT)))./sT.numTrials;
+fprintf('Cond: %15s  Error perc Turner:\t %f \n',sT.condition,percentageTurner);
+end
+% fprintf('Cond: %15s  TrialDuration: \t %f \n',sT.condition,median(sT.trialDuration))
+
+
+%% Sanity Checks
+if cfg.sanityChecks
+
+%% Check if the start and end position match to the firstArm and second Arm
+
+%% Unnormalized First Arm has to match the calculated angle from start
+%% position
+sanityCh.diffFirstArm = sT.calculatedFirstArm - normAngle(rawDat.firstArm(sT.lastIdxRaw));
+%% Unnormalized Second Arm has to match the calculated angle from end position
+%% This only makes sense for the vestibular and the active condition, not
+%% for the proprioceptive!
+sanityCh.diffSecondArm = sT.calculatedSecondArm - normAngle(rawDat.secondArm(sT.lastIdxRaw));
+% % CORRESPONDING TO:
+% % rawDat.firstArm             = -data{13}+180; % only relevant for the active conditions % 180 deg offset to turningAngle
+% % rawDat.secondArm            = -data{15}; % only relevant for the active conditions % second Arm global angle against z-axis   
+
+% %% Unnormalized First Arm has to match the calculated angle from start position
+% sT.calculatedFirstArm = atan2(sT.StartPosX, sT.StartPosZ) * 180/pi;  
+% sanityCh.diffFirstArm = sT.calculatedFirstArm - normAngle(rawDat.firstArm(sT.lastIdxRaw));
+% %% Unnormalized Second Arm has to match the calculated angle from end position
+% %% This only makes sense for the vestibular and the active condition, not
+% %% for the proprioceptive!
+% sT.calculatedSecondArm = atan2(sT.EndPosX, sT.EndPosZ) * 180/pi;  
+% sanityCh.diffSecondArm = sT.calculatedSecondArm - normAngle(rawDat.secondArm(sT.lastIdxRaw));
+% % % CORRESPONDING TO:
+% % % rawDat.firstArm             = data{13}-180; % only relevant for the active conditions % 180 deg offset to turningAngle
+% % % rawDat.secondArm            = data{15}; % only relevant for the active conditions % second Arm global angle against z-axis
+
+
+%% Degrees Turned Sanity Check
+sanityCh.plannedAngles = sT.turningAnglePlanned;
+sanityCh.guideRotations = normAngle(rawDat.guidingOrient(sT.turnEndIndIdx) - rawDat.guidingOrient(sT.turnStartIndIdx));
+sanityCh.headRotationsTurn = normAngle(rawDat.roll(sT.startSecondPathIdx) - rawDat.roll(sT.turnStartIndIdx)); 
+sanityCh.armDiffRotations = normAngle(sT.secondArm - (sT.firstArm + 180));  % Calculates the difference from the real arm configuration
+sanityCh.calcArmDiffRotations = normAngle(sT.calculatedSecondArm - (sT.calculatedFirstArm + 180));  % Calculates the difference from the start and end positions in VR Positions!
+sanityCh.proprioceptiveDummyRotations = rawDat.proprioceptiveDummy(sT.startSecondPathIdx);
+
+%% Plot velocities, only as a check/for the documentation
+% plotVelocities(rawDat);
+end
+%% Plot all angles
+
+%%  Plot Trial Info
+if cfg.showTrialInfo
+fprintf('Trial %3i\t gamma %3.0f�\t firstArm %3.0f�\t secondArm %3.0f� \t arrowInit %3.0f� \t arrowCho %3.0f�  \n',trial,sT.gamma(trial),normAngle(rawDat.firstArm(endIdx)),rawDat.secondArm(endIdx),   sT.arrowAngleInitial(trial),sT.chosenArrowAngle(trial))
+end

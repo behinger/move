@@ -1,0 +1,209 @@
+clear all;
+close all;
+
+
+%% Read out data
+%  svn_path = 'D:\behinger\Studium\move\svn_move\';% behinger
+% svn_path = '/net/store/projects/move/move_svn';% Uni
+ svn_path = 'C:\Users\user\Documents\Petra\Studium\Study_Project_MOVE\move';% pefischer
+ svn_path = 'C:\Users\user\Documents\Petra\Studium\Study_Project_MOVE\move';% pefischer
+
+%% Henning
+% sT.subject = 'Henning';
+% rawDat = readRawVRData('../Experiment_Recordings/Participant_39/Participant_39_Time_1354631484.txt',25); % passive 12  tr
+% rawDat = readRawVRData([svn_path '/code/Experiment_Recordings/Participant_39/Participant_39_Time_1354626751.txt'],25); % vestibular 11 tr
+% rawDat = readRawVRData([svn_path '/code/Experiment_Recordings/Participant_39/Participant_39_Time_1354628037.txt'],25); % active 9 tr
+% rawDat = readRawVRData([svn_path '/code/Experiment_Recordings/Participant_39/Participant_39_Time_1354629946.txt'],25); % proprio 3 tr
+% rawDat = readRawVRData([svn_path '/code/Experiment_Recordings/Participant_39/Participant_39_Time_1354630550.txt'],25); %proprioceptive 10 tr
+%% Jacob
+sT.subject = 'Jacob';
+% rawDat = readRawVRData([svn_path '/code/Experiment_Recordings/Participant_41/Participant_41_Time_1354970911.txt']); % passive 10  tr
+ rawDat = readRawVRData([svn_path '/code/Experiment_Recordings/Participant_41/Participant_41_Time_1354969945.txt']); % active 10  tr
+% % 
+% rawDat = readRawVRData({ [svn_path '/code/Experiment_Recordings/Participant_41/Participant_41_Time_1354968360.txt'], ...
+%                          [svn_path '/code/Experiment_Recordings/Participant_41/Participant_41_Time_1354968668.txt'], ...
+%                          [svn_path '/code/Experiment_Recordings/Participant_41/Participant_41_Time_1354969365.txt'] }); %vestibular
+
+% rawDat = readRawVRData([svn_path '/code/Experiment_Recordings/Participant_41/Participant_41_Time_1354966571.txt']); % proprio 10  tr
+
+%%
+% sT.subject = 'bene'
+% rawDat = readRawVRData('../Experiment_Recordings/Participant_41_10-12-2012/Participant_41_Time_1355151114.txt')
+% rawDat =´ readRawVRData('../Experiment_Recordings/Participant_41/Participant_41_Time_1354970721.txt');% % test
+
+%% Convert to 1: nrTrials
+
+
+% in the vestibular condition this has to be active!
+[rawDat_cut badSegments] = behav_cutInconsistendTrials(rawDat,0);
+rawDat = rawDat_cut;
+%%
+sT.firstIdxRaw = find(rawDat.event == 2)';
+sT.lastIdxRaw  = find(rawDat.event == 9)';
+sT.fadeIndIdx  = find(rawDat.event == 8)';
+sT.turnStartIndIdx  = find(rawDat.event == 4)';
+sT.turnEndIndIdx  = find(rawDat.event == 5)';  % This is only the moment where the guiding object stops, it does not mean that the subject has finished rotating
+sT.startSecondPathIdx  = find(rawDat.event == 6)';
+
+
+if length(sT.firstIdxRaw) ~= length(sT.lastIdxRaw)
+    warning('There seems to be a problem regarding cut off trials.')
+end
+
+
+sT.condition = rawDat.condition{1};
+
+sT.trialNumbers =rawDat.trialNumber(sT.lastIdxRaw);
+
+sT.numTrials = numel(sT.trialNumbers);
+
+
+%sT.trialNumbers = sT.trialNumbers - sT.trialNumbers(1) + 1;
+sT.turningAnglePlanned  =   rawDat.turningAnglePlanned(sT.lastIdxRaw);
+
+sT.secondArm            =  normAngle(rawDat.secondArm(sT.lastIdxRaw)          - rawDat.firstArm(sT.lastIdxRaw)); % normalize regarding to arm 1 and put it in 0 to 360
+
+sT.firstArm             =  normAngle(rawDat.firstArm(sT.lastIdxRaw)           - rawDat.firstArm(sT.lastIdxRaw));
+
+% sT.arrowAngle           =  normAngle(rawDat.chosenAngle(sT.lastIdxRaw));       
+
+sT.arrowAngleInitial    =  normAngle(rawDat.chosenAngle(sT.fadeIndIdx)); 
+
+sT.chosenArrowAngle     =  normAngle(rawDat.chosenAngle(sT.lastIdxRaw));
+
+sT.chosenArrowAngleNorm =  sT.chosenArrowAngle - sT.arrowAngleInitial;
+
+
+
+sT.StartPosX            = rawDat.posX(sT.firstIdxRaw);
+sT.StartPosZ            = rawDat.posZ(sT.firstIdxRaw);
+
+sT.EndPosX              = rawDat.posX(sT.fadeIndIdx);  % HERE I WOULD TAKE sT.fadeIndIdx instead of lastIdxRaw
+sT.EndPosZ              = rawDat.posZ(sT.fadeIndIdx);
+sT.trialDuration        = rawDat.time(sT.lastIdxRaw) - rawDat.time(sT.firstIdxRaw);
+
+
+% sT.degreesTurned = normAngle(normAngle(180-sT.secondArm));
+sT.calculatedFirstArm = atan2(sT.StartPosZ, sT.StartPosX) * 180/pi;  
+sT.calculatedSecondArm = atan2(sT.EndPosZ, sT.EndPosX) * 180/pi;  
+sT.degreesTurned = normAngle(sT.calculatedSecondArm - (sT.calculatedFirstArm + 180));  % This is the better estimate
+if strcmp(sT.condition,'proprioceptive')
+    sT.degreesTurned = rawDat.proprioceptiveDummy(sT.fadeIndIdx);  
+end
+% only proprioceptive, as we have to convert real walked posX/posZ to
+% actual virtual world walked posX posZ, this is only important for the
+% last entry of posX / posZ, the others are ok :-)
+% THis is deprecated, we do not need it anymore after Jacob / Henning
+if strcmp(sT.condition,'proprioceptive') && (strcmp(sT.subject,'Henning') || strcmp(sT.subject,'Jacob'))
+    for tr = 1:sT.numTrials
+        beta = sT.degreesTurned(tr);
+        rotationMatrix = [cosd(beta) -sind(beta); sind(beta) cosd(beta)];
+        endPosNew =rotationMatrix*[sT.EndPosX(tr);sT.EndPosZ(tr)];
+        sT.EndPosX(tr) = endPosNew(1);
+        sT.EndPosZ(tr) = endPosNew(2);
+    end
+end
+% See dropSVN\Vizard_code_documentation\Angles_ForAnalysis.jpg for details
+% of the calculation of gamma:
+bLen = sqrt((((sT.EndPosX - sT.StartPosX)).^2) + (((sT.EndPosZ - sT.StartPosZ).^2))) % hypothenuse, distance between points
+aLen = sqrt(sT.EndPosX.^2 + sT.EndPosZ.^2) % distance to (0|0)
+cLen = sqrt(sT.StartPosX.^2 + sT.StartPosZ.^2) % distance to (0|0)
+gamma = radtodeg(asin(cLen .* sin(degtorad(180 - abs(sT.degreesTurned))) ./ bLen));
+% The following alternative is a sanity check, for old files it does not
+% work for the proprioceptive (as the positions jumped to the real position
+% back and not the VR position) but for the new files it should
+gammaAlternat = radtodeg(acos(((aLen .^ 2 + bLen .^ 2 - cLen .^ 2) ./ (2 * (aLen .* bLen)))))  
+
+
+sT.arrowAngleInitial    =  normAngle(rawDat.chosenAngle(sT.fadeIndIdx)); 
+sT.chosenArrowAngle     =  normAngle(rawDat.chosenAngle(sT.lastIdxRaw));
+sT.chosenArrowAngleNorm =  sT.chosenArrowAngle - sT.arrowAngleInitial;
+
+%% NOT ABSOLUTELY SURE IF IT HAS TO BE + or MINUS before (gamma.*sign)!!!!
+% THAT'S WHY I HAVE CHANGESIGN, I'm 95% sure, that it has to be -1!!
+% A right-rotation (clockwise) of the arrow in Vizard causes the arrow angle to
+% increase (addition), and a left rotation (counterclockwise) causes it to 
+% decrease (subtraction).
+% In the polar plot in MATLAB a right-rotation is caused by a subtraction
+% (!!) and if you add values to an angle, the angle turns to the left!!!
+changeSign = -1;
+sT.arrowAngleOptimalT = normAngle(180  + (changeSign * gamma .* sign(sT.degreesTurned)));  %180+ as the arrow otherwise would point in the wrong direction
+sT.arrowAngleOptimalNT = normAngle(sT.arrowAngleOptimalT + sT.degreesTurned);  % Add the turning angle (if it is negative, it automatically gets subtracted) to compensate for the nonturner effect\
+% % These lines are only to check if the normalized arrow yield the same
+% % error, and it does if you compare sT.errors_TNotNormed with sT.errors_T
+% % and sT.errors_NTNotNormed with sT.errors_NT
+% sT.arrowAngleOptimalTNotNormed = normAngle(180 + sT.arrowAngleInitial  + (changeSign * gamma .* sign(sT.degreesTurned)));  %180+ as the arrow otherwise would point in the wrong direction
+% sT.arrowAngleOptimalNTNotNormed = sT.arrowAngleOptimalTNotNormed + sT.degreesTurned;  % Add the turning angle (if it is negative, it automatically gets subtracted) to compensate for the nonturner effect\
+
+
+% Calc errors
+sT.errors_T = normAngle(sT.chosenArrowAngleNorm - sT.arrowAngleOptimalT);
+sT.errors_NT = normAngle(sT.chosenArrowAngleNorm - sT.arrowAngleOptimalNT);
+% % These lines are only to check if the normalized arrow yield the same
+% % error, and they do
+% sT.errors_TNotNormed = normAngle(sT.chosenArrowAngle - sT.arrowAngleOptimalTNotNormed);
+% sT.errors_NTNotNormed = normAngle(sT.chosenArrowAngle - sT.arrowAngleOptimalNTNotNormed);
+
+
+%% Plot
+
+cfg.plot = 0;
+if cfg.plot
+    figure;
+    bar(sT.trialNumbers, sT.errors_T);
+    xlabel('Time (Trials in order)');
+    ylabel('Error in degrees');
+    title('Errors Turners over trials');
+    axis([0 max(sT.trialNumbers)+1 -200 200])
+    figure;
+    bar(sT.trialNumbers,sT.errors_NT);
+    xlabel('Time (Trials in order)');
+    ylabel('Error in degrees');
+    title('Errors Non-Turners over trials');
+    axis([0 max(sT.trialNumbers)+1 -200 200])
+end
+%%
+fprintf('Cond: %15s  Turner  Error Median: \t %f \n',sT.condition, median(abs(sT.errors_T)))
+fprintf('Cond: %15s  NonTurner Error Median:\t %f \n',sT.condition,median(abs(sT.errors_NT)))
+fprintf('Cond: %15s  TrialDuration: \t %f \n',sT.condition,median(sT.trialDuration))
+
+
+%% Sanity Checks
+
+
+%% Check if the start and end position match to the firstArm and second Arm
+
+%% Unnormalized First Arm has to match the calculated angle from start
+%% position
+sanityCh.diffFirstArm = sT.calculatedFirstArm - normAngle(rawDat.firstArm(sT.lastIdxRaw));
+%% Unnormalized Second Arm has to match the calculated angle from end position
+%% This only makes sense for the vestibular and the active condition, not
+%% for the proprioceptive!
+sanityCh.diffSecondArm = sT.calculatedSecondArm - normAngle(rawDat.secondArm(sT.lastIdxRaw));
+% % CORRESPONDING TO:
+% % rawDat.firstArm             = -data{13}+180; % only relevant for the active conditions % 180 deg offset to turningAngle
+% % rawDat.secondArm            = -data{15}; % only relevant for the active conditions % second Arm global angle against z-axis   
+
+% %% Unnormalized First Arm has to match the calculated angle from start position
+% sT.calculatedFirstArm = atan2(sT.StartPosX, sT.StartPosZ) * 180/pi;  
+% sanityCh.diffFirstArm = sT.calculatedFirstArm - normAngle(rawDat.firstArm(sT.lastIdxRaw));
+% %% Unnormalized Second Arm has to match the calculated angle from end position
+% %% This only makes sense for the vestibular and the active condition, not
+% %% for the proprioceptive!
+% sT.calculatedSecondArm = atan2(sT.EndPosX, sT.EndPosZ) * 180/pi;  
+% sanityCh.diffSecondArm = sT.calculatedSecondArm - normAngle(rawDat.secondArm(sT.lastIdxRaw));
+% % % CORRESPONDING TO:
+% % % rawDat.firstArm             = data{13}-180; % only relevant for the active conditions % 180 deg offset to turningAngle
+% % % rawDat.secondArm            = data{15}; % only relevant for the active conditions % second Arm global angle against z-axis
+
+
+%% Degrees Turned Sanity Check
+sanityCh.plannedAngles = sT.turningAnglePlanned;
+sanityCh.guideRotations = normAngle(rawDat.guidingOrient(sT.turnEndIndIdx) - rawDat.guidingOrient(sT.turnStartIndIdx));
+sanityCh.headRotationsTurn = normAngle(rawDat.roll(sT.startSecondPathIdx) - rawDat.roll(sT.turnStartIndIdx)); 
+sanityCh.armDiffRotations = normAngle(sT.secondArm - (sT.firstArm + 180));  % Calculates the difference from the real arm configuration
+sanityCh.calcArmDiffRotations = normAngle(sT.calculatedSecondArm - (sT.calculatedFirstArm + 180));  % Calculates the difference from the start and end positions in VR Positions!
+sanityCh.proprioceptiveDummyRotations = rawDat.proprioceptiveDummy(sT.startSecondPathIdx);
+
+%% Plot velocities, only as a check/for the documentation
+% plotVelocities(rawDat);
